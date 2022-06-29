@@ -1,2 +1,4 @@
 __pycache__/
 *.docx
+.idea/
+huffman_trees
