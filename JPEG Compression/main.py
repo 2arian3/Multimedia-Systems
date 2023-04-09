@@ -1,6 +1,5 @@
 import sys
 import jpeg
-import numpy as np
 
 
 def main():
@@ -10,6 +9,7 @@ def main():
         
     # Reading Image
     image_name = sys.argv[1]
+    # image_name = 'JPEG Compression/photo1.png'
     img = jpeg.utils.read_image_from_file(image_name)
     
     encoder = jpeg.Encoder(img)

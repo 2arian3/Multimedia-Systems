@@ -81,44 +81,77 @@ class Encoder:
         Y_q = self.quantization(Y_dct, 'l')
         Cb_q = self.quantization(Cb_dct, 'c')
         Cr_q = self.quantization(Cr_dct, 'c')
+        C_q = np.vstack((Cb_q, Cr_q))
         
+        Y_DPCM, Y_RLC = [], []
+        C_DPCM, C_RLC = [], []
+        
+        for i in utils.ZIGZAG:
+            y_block = np.array(Y_q[i]).flatten()
+            c_block = np.array(C_q[i]).flatten()
+            
+            Y_DPCM.append(y_block[0])
+            C_DPCM.append(c_block[0])
+
+            Y_RLC.append(run_length_coding(y_block[1:]))
+            C_RLC.append(run_length_coding(c_block[1:]))
+        
+        Y_DPCM = encode_differential(Y_DPCM)
+        C_DPCM = encode_differential(C_DPCM)
+        
+        result = []
+        for rlc in Y_RLC:
+            result += rlc
+        Y_RLC = result
+        
+        result = []
+        for rlc in C_RLC:
+            result += rlc
+        C_RLC = result
+        
+        Y_DPCM = [(len(get_binary_string(data)), get_binary_string(data)) for data in Y_DPCM]
+        C_DPCM = [(len(get_binary_string(data)), get_binary_string(data)) for data in C_DPCM]
+   
         # Creating huffman trees
-        huffman_trees_for_Y = [huffman.HuffmanTree(np.array(block).flatten()) for block in Y_q]
-        huffman_trees_for_Cb = [huffman.HuffmanTree(np.array(block).flatten()) for block in Cb_q]
-        huffman_trees_for_Cr = [huffman.HuffmanTree(np.array(block).flatten()) for block in Cr_q]
+        huffman_tree_for_y_dc = huffman.HuffmanTree([size for size, _ in Y_DPCM])
+        huffman_tree_for_c_dc = huffman.HuffmanTree([size for size, _ in C_DPCM])
         
-        compressed_size_in_bits = 0
-        actual_size_in_bits = 0
-
-        for huffman_tree in huffman_trees_for_Y:
-            result_size, actual_size = utils.compute_compression_rate(
-                huffman_tree.value_to_bitstring_table(), huffman_tree.actual_arr
-            )
-            compressed_size_in_bits += result_size
-            actual_size_in_bits += actual_size
-
-        for huffman_tree in huffman_trees_for_Cb:
-            result_size, actual_size = utils.compute_compression_rate(
-                huffman_tree.value_to_bitstring_table(), huffman_tree.actual_arr
-            )
-            compressed_size_in_bits += result_size
-            actual_size_in_bits += actual_size
-
-        for huffman_tree in huffman_trees_for_Cr:
-            result_size, actual_size = utils.compute_compression_rate(
-                huffman_tree.value_to_bitstring_table(), huffman_tree.actual_arr
-            )
-            compressed_size_in_bits += result_size
-            actual_size_in_bits += actual_size
-        
-        print('Actual Size: ', actual_size_in_bits)
-        print('Compressed Size: ', compressed_size_in_bits)
-        print('Compression Ratio: ', compressed_size_in_bits / actual_size_in_bits)
+        huffman_tree_for_y_ac = huffman.HuffmanTree([run_length for run_length, _ in Y_RLC])
+        huffman_tree_for_c_ac = huffman.HuffmanTree([run_length for run_length, _ in C_RLC])
         
         # Storing huffman trees using pickle
         with open('huffman_trees', 'wb') as f:
             pickle.dump({
-                'huffman_trees_for_Y': huffman_trees_for_Y,
-                'huffman_trees_for_Cb': huffman_trees_for_Cb,
-                'huffman_trees_for_Cr': huffman_trees_for_Cr
+                'huffman_tree_for_y_dc': huffman_tree_for_y_dc,
+                'huffman_tree_for_y_ac': huffman_tree_for_y_ac,
+                'huffman_tree_for_c_dc': huffman_tree_for_c_dc,
+                'huffman_tree_for_c_ac': huffman_tree_for_c_ac
             }, f)
+            
+
+def run_length_coding(data):
+    """
+    Run length encoding
+    """
+    result = []
+    zero_counts = 0
+    for i in range(len(data)):
+        if data[i] == 0:
+            zero_counts += 1
+        else:
+            result.append((zero_counts, data[i]))
+            zero_counts = 0
+    result.append((0, 0))
+    return result
+
+def encode_differential(seq):
+    return list(
+        (item - seq[i - 1]) if i else item
+        for i, item in enumerate(seq)
+    )
+    
+def get_binary_string(num):
+    string = bin(num)[2:]
+    if num < 0:
+        return ''.join(['1' if char == '0' else '0' for char in string])
+    return string
